@@ -1,15 +1,15 @@
 // firebase.ts
 import { initializeApp } from "firebase/app";
 import {
-    User as FirebaseUser,
-    getAuth,
-    GoogleAuthProvider,
-    signInWithPopup,
-    signOut,
+  User as FirebaseUser,
+  GoogleAuthProvider,
+  initializeAuth,
+  inMemoryPersistence,
+  signOut,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { doc, getDoc, getFirestore, setDoc } from "firebase/firestore";
 
-// 🔑 Firebase config (from Firebase Console)
+// 🔑 Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyBPDTva1kBr73VASF36htznxyH0lsb4FUc",
   authDomain: "medigridapp.firebaseapp.com",
@@ -20,38 +20,76 @@ const firebaseConfig = {
 };
 
 // 🚀 Initialize Firebase
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 
-// ✅ Initialize Firebase Authentication
-export const auth = getAuth(app);
+// ✅ Initialize Auth with in-memory persistence (React Native compatible)
+export const auth = initializeAuth(app, {
+  persistence: inMemoryPersistence,
+});
 
-// ✅ Initialize Cloud Firestore
+// ✅ Firestore
 export const db = getFirestore(app);
 
 // ✅ Google Auth Provider
-const provider = new GoogleAuthProvider();
+export const provider = new GoogleAuthProvider();
+
+// -------------------- Helper Functions -------------------- //
 
 /**
- * Sign in with Google
- * Returns both Firebase User + OAuth AccessToken
+ * Calculate age from date of birth
  */
-export const signInWithGoogle = async (): Promise<{
-  user: FirebaseUser;
-  accessToken: string | null;
-}> => {
-  try {
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const accessToken = credential?.accessToken ?? null;
+const calculateAge = (dob: string | null): number | undefined => {
+  if (!dob) return undefined;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
 
-    return { user: result.user, accessToken };
+/**
+ * Map Firebase User → App User
+ */
+export const mapUser = (user: FirebaseUser | null, dob: string | null = null) => {
+  if (!user) return null;
+  return {
+    uid: user.uid,
+    email: user.email,
+    name: user.displayName ?? null,
+    dateOfBirth: dob,
+    age: calculateAge(dob),
+  };
+};
+
+/**
+ * Save user to Firestore
+ */
+export const saveUserToFirestore = async (user: FirebaseUser, dob: string | null = null) => {
+  try {
+    const userRef = doc(db, "users", user.uid);
+    const existingUser = await getDoc(userRef);
+
+    if (!existingUser.exists()) {
+      await setDoc(userRef, {
+        uid: user.uid,
+        email: user.email,
+        name: user.displayName ?? null,
+        dateOfBirth: dob,
+      });
+    } else if (dob) {
+      await setDoc(userRef, { dateOfBirth: dob }, { merge: true });
+    }
   } catch (error) {
-    console.error("Google sign-in error:", error);
-    throw error;
+    console.error("Error saving user:", error);
   }
 };
 
-// ✅ Sign out helper
+/**
+ * Sign out helper
+ */
 export const logout = async () => {
   try {
     await signOut(auth);
@@ -60,21 +98,5 @@ export const logout = async () => {
   }
 };
 
-// ✅ Custom User type for your app
-export type User = {
-  uid: string;
-  email: string | null;
-  name?: string | null;
-};
-
-// ✅ Helper: map FirebaseUser → your User type
-export const mapUser = (user: FirebaseUser | null): User | null => {
-  if (!user) return null;
-  return {
-    uid: user.uid,
-    email: user.email,
-    name: user.displayName ?? null,
-  };
-};
-
+// ✅ Default export
 export default app;

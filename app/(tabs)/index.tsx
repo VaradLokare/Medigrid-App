@@ -1,11 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
+  Easing,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -19,8 +22,6 @@ import GoogleFit, { Scopes } from "react-native-google-fit";
 import { useAuth } from "../contexts/AuthContext";
 import { signInWithGoogle } from "../firebase";
 import useGoogleFit from "../hooks/useGoogleFit";
-
-
 
 // Types
 type HealthData = {
@@ -38,7 +39,7 @@ type HealthData = {
 type SleepEntry = {
   startDate: string;
   endDate: string;
-  [key: string]: any; // optional → allows extra fields from Google Fit
+  [key: string]: any;
 };
 
 interface HealthAnalysis {
@@ -55,14 +56,32 @@ interface HealthCardProps {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   delay: number;
+  showButton?: boolean;
+  onPress?: () => void;
 }
 
 const { width } = Dimensions.get("window");
 
+// Color scheme constants
+const COLORS = {
+  primary: "#007BFF",      // Blue for buttons, headers, important elements
+  secondary: "#28A745",    // Green for progress bars, health stats
+  accent: "#FFA500",       // Light orange for highlights, notifications
+  background: "#FFFFFF",   // White for screens, cards
+  teal: "#008080",         // Teal for modern healthcare vibe
+  softGrey: "#F5F5F5",     // Soft grey for backgrounds
+  textDark: "#333333",     // Dark text
+  textLight: "#666666",    // Light text
+  success: "#28A745",      // Success green
+  warning: "#FFC107",      // Warning yellow
+  danger: "#DC3545",       // Danger red
+};
+
 export default function HospitalDashboard() {
+  const router = useRouter();
   const [sleepData, setSleepData] = useState<SleepEntry[]>([]);
   const { user, login } = useAuth();
-const { steps, heartRate} = useGoogleFit();
+  const { steps, heartRate } = useGoogleFit();
   const [healthData, setHealthData] = useState<HealthData>({
     heartRate: 0,
     systolic: 0,
@@ -75,33 +94,39 @@ const { steps, heartRate} = useGoogleFit();
     lastUpdated: new Date(),
   });
 
+  // Animation states for the transition modal
+  const [showHeartRateModal, setShowHeartRateModal] = useState(false);
+  const [animationStep, setAnimationStep] = useState(0);
+  const [modalAnim] = useState(new Animated.Value(0));
+  const [fingerAnim] = useState(new Animated.Value(0));
+  const [pulseAnim] = useState(new Animated.Value(1));
+
   useEffect(() => {
-  let totalSleep = 0;
+    let totalSleep = 0;
 
-  if (Array.isArray(sleepData) && sleepData.length > 0) {
-    totalSleep = sleepData.reduce((acc, entry) => {
-      const start = new Date(entry.startDate).getTime();
-      const end = new Date(entry.endDate).getTime();
-      return acc + (end - start) / (1000 * 60 * 60); // convert ms → hours
-    }, 0);
-  }
+    if (Array.isArray(sleepData) && sleepData.length > 0) {
+      totalSleep = sleepData.reduce((acc, entry) => {
+        const start = new Date(entry.startDate).getTime();
+        const end = new Date(entry.endDate).getTime();
+        return acc + (end - start) / (1000 * 60 * 60);
+      }, 0);
+    }
 
-  setHealthData((prev) => ({
-    ...prev,
-    heartRate:
-      Array.isArray(heartRate) && heartRate.length > 0
-        ? (heartRate[0] as any).value ?? prev.heartRate
-        : typeof heartRate === "number"
-        ? heartRate
-        : prev.heartRate,
-    steps: steps || prev.steps,
-    sleep: totalSleep || prev.sleep,
-    calories: Math.round((steps || 0) * 0.04),
-    distance: parseFloat(((steps || 0) * 0.0008).toFixed(2)),
-    lastUpdated: new Date(),
-  }));
-}, [steps, heartRate, sleepData]);
-
+    setHealthData((prev) => ({
+      ...prev,
+      heartRate:
+        Array.isArray(heartRate) && heartRate.length > 0
+          ? (heartRate[0] as any).value ?? prev.heartRate
+          : typeof heartRate === "number"
+          ? heartRate
+          : prev.heartRate,
+      steps: steps || prev.steps,
+      sleep: totalSleep || prev.sleep,
+      calories: Math.round((steps || 0) * 0.04),
+      distance: parseFloat(((steps || 0) * 0.0008).toFixed(2)),
+      lastUpdated: new Date(),
+    }));
+  }, [steps, heartRate, sleepData]);
 
   const [analyses, setAnalyses] = useState<Record<string, HealthAnalysis>>({});
   const [refreshing, setRefreshing] = useState(false);
@@ -134,17 +159,17 @@ const { steps, heartRate} = useGoogleFit();
   }, []);
 
   const checkGoogleFitConnection = async () => {
-  try {
-    const isAuthorized = GoogleFit.isAuthorized; // ✅ no ()
-    setIsConnected(isAuthorized);
+    try {
+      const isAuthorized = GoogleFit.isAuthorized;
+      setIsConnected(isAuthorized);
 
-    if (isAuthorized) {
-      fetchGoogleFitData();
+      if (isAuthorized) {
+        fetchGoogleFitData();
+      }
+    } catch (error) {
+      console.log("Error checking Google Fit connection:", error);
     }
-  } catch (error) {
-    console.log("Error checking Google Fit connection:", error);
-  }
-};
+  };
 
   // Connect to Google Fit with Firebase user
   const connectGoogleFit = async () => {
@@ -160,7 +185,6 @@ const { steps, heartRate} = useGoogleFit();
 
     setIsLoading(true);
     try {
-      // Authorize Google Fit
       const authResult = await GoogleFit.authorize({
         scopes: [
           Scopes.FITNESS_ACTIVITY_READ,
@@ -244,13 +268,12 @@ const { steps, heartRate} = useGoogleFit();
 
       // Get sleep data
       const sleepData = await GoogleFit.getSleepSamples(
-  {
-    startDate: new Date(Date.now() - 86400000).toISOString(), // Last 24 hours
-    endDate: todayEnd.toISOString(),
-  },
-  true // ✅ use true for local time zone, false if you want UTC
-);
-
+        {
+          startDate: new Date(Date.now() - 86400000).toISOString(),
+          endDate: todayEnd.toISOString(),
+        },
+        true
+      );
       
       let sleep = 6.5;
       if (sleepData.length > 0) {
@@ -414,8 +437,57 @@ const { steps, heartRate} = useGoogleFit();
   // Status dot
   const StatusIndicator = ({ status }: { status: "good" | "warning" | "bad" }) => {
     const color =
-      status === "good" ? "#10B981" : status === "warning" ? "#F59E0B" : "#EF4444";
+      status === "good" ? COLORS.secondary : status === "warning" ? COLORS.accent : COLORS.danger;
     return <View style={[styles.statusIndicator, { backgroundColor: color }]} />;
+  };
+
+  // Heart Rate Modal Animation
+  const startHeartRateAnimation = () => {
+    setShowHeartRateModal(true);
+    setAnimationStep(0);
+    
+    Animated.sequence([
+      // Fade in modal
+      Animated.timing(modalAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      // Wait a moment
+      Animated.delay(1000),
+      // Show finger animation
+      Animated.timing(fingerAnim, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      // Start pulse animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      ),
+    ]).start(() => {
+      // After animations complete, navigate to heart rate screen
+      setTimeout(() => {
+        setShowHeartRateModal(false);
+        router.push("/HeartrateMonitor/Heartrate");
+      }, 2000);
+    });
+
+    // Update animation steps for text instructions
+    setTimeout(() => setAnimationStep(1), 1500);
+    setTimeout(() => setAnimationStep(2), 3000);
   };
 
   // Card Component
@@ -427,7 +499,9 @@ const { steps, heartRate} = useGoogleFit();
     message,
     icon,
     color,
-    delay
+    delay,
+    showButton = false,
+    onPress
   }: HealthCardProps) => {
     const [cardAnim] = useState(new Animated.Value(0));
 
@@ -476,6 +550,16 @@ const { steps, heartRate} = useGoogleFit();
             <Text style={styles.messageText}>{message}</Text>
           </View>
         )}
+
+        {showButton && (
+          <TouchableOpacity 
+            style={[styles.cardButton, { backgroundColor: color }]}
+            onPress={onPress}
+          >
+            <Text style={styles.cardButtonText}>Check Heart Rate</Text>
+            <Ionicons name="arrow-forward" size={16} color="white" />
+          </TouchableOpacity>
+        )}
       </Animated.View>
     );
   };
@@ -483,7 +567,7 @@ const { steps, heartRate} = useGoogleFit();
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4F46E5" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Initializing Health Dashboard...</Text>
       </View>
     );
@@ -513,7 +597,7 @@ const { steps, heartRate} = useGoogleFit();
               </Text>
             </View>
             <TouchableOpacity style={styles.avatar}>
-              <Ionicons name="person" size={24} color="#4F46E5" />
+              <Ionicons name="person" size={24} color={COLORS.primary} />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -537,7 +621,7 @@ const { steps, heartRate} = useGoogleFit();
             { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
           ]}
         >
-          <LinearGradient colors={["#4F46E5", "#7C3AED"]} style={styles.overviewGradient}>
+          <LinearGradient colors={[COLORS.primary, "#0056b3"]} style={styles.overviewGradient}>
             <View style={styles.overviewHeader}>
               <View>
                 <Text style={styles.overviewTitle}>Today's Overview</Text>
@@ -574,8 +658,10 @@ const { steps, heartRate} = useGoogleFit();
             status={analyses.heartRate?.status}
             message={analyses.heartRate?.message}
             icon="heart"
-            color="#EF4444"
+            color={COLORS.primary}
             delay={100}
+            showButton={true}
+            onPress={startHeartRateAnimation}
           />
           <HealthCard
             title="Blood Pressure"
@@ -584,7 +670,7 @@ const { steps, heartRate} = useGoogleFit();
             status={analyses.bloodPressure?.status}
             message={analyses.bloodPressure?.message}
             icon="water"
-            color="#3B82F6"
+            color={COLORS.teal}
             delay={200}
           />
           <HealthCard
@@ -594,7 +680,7 @@ const { steps, heartRate} = useGoogleFit();
             status={analyses.steps?.status}
             message={analyses.steps?.message}
             icon="walk"
-            color="#10B981"
+            color={COLORS.secondary}
             delay={300}
           />
           <HealthCard
@@ -602,7 +688,7 @@ const { steps, heartRate} = useGoogleFit();
             value={healthData.calories}
             unit="kcal"
             icon="flame"
-            color="#F59E0B"
+            color={COLORS.accent}
             delay={400}
           />
           <HealthCard
@@ -610,7 +696,7 @@ const { steps, heartRate} = useGoogleFit();
             value={healthData.distance}
             unit="km"
             icon="navigate"
-            color="#6366F1"
+            color={COLORS.primary}
             delay={500}
           />
           <HealthCard
@@ -620,7 +706,7 @@ const { steps, heartRate} = useGoogleFit();
             status={analyses.sleep?.status}
             message={analyses.sleep?.message}
             icon="moon"
-            color="#8B5CF6"
+            color={COLORS.teal}
             delay={600}
           />
           <HealthCard
@@ -630,7 +716,7 @@ const { steps, heartRate} = useGoogleFit();
             status={analyses.oxygen?.status}
             message={analyses.oxygen?.message}
             icon="fitness"
-            color="#EC4899"
+            color={COLORS.primary}
             delay={700}
           />
         </View>
@@ -642,7 +728,7 @@ const { steps, heartRate} = useGoogleFit();
             { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
           ]}
         >
-          <LinearGradient colors={["#0EA5E9", "#3B82F6"]} style={styles.summaryGradient}>
+          <LinearGradient colors={[COLORS.teal, COLORS.primary]} style={styles.summaryGradient}>
             <View style={styles.summaryHeader}>
               <View style={styles.summaryIcon}>
                 <Ionicons name="medkit" size={24} color="white" />
@@ -662,11 +748,67 @@ const { steps, heartRate} = useGoogleFit();
 
             <TouchableOpacity style={styles.reportButton}>
               <Text style={styles.reportButtonText}>View Detailed Report</Text>
-              <Ionicons name="arrow-forward" size={18} color="#3B82F6" />
+              <Ionicons name="arrow-forward" size={18} color={COLORS.primary} />
             </TouchableOpacity>
           </LinearGradient>
         </Animated.View>
       </ScrollView>
+
+      {/* Heart Rate Instruction Modal */}
+      <Modal
+        visible={showHeartRateModal}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => setShowHeartRateModal(false)}
+      >
+        <Animated.View style={[styles.modalContainer, { opacity: modalAnim }]}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Heart Rate Measurement</Text>
+            
+            <Animated.View 
+              style={[
+                styles.fingerAnimation, 
+                { 
+                  transform: [
+                    { translateY: fingerAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [100, 0]
+                    })}
+                  ]
+                }
+              ]}
+            >
+              <Animated.View style={[styles.finger, { transform: [{ scale: pulseAnim }] }]}>
+                <Ionicons name="finger-print" size={60} color={COLORS.primary} />
+              </Animated.View>
+              
+              <View style={styles.phone}>
+                <View style={styles.cameraIndicator} />
+                <View style={styles.flashIndicator} />
+              </View>
+            </Animated.View>
+
+            <Animated.View style={[styles.instructionText, { opacity: fingerAnim }]}>
+              {animationStep === 0 && (
+                <Text style={styles.instruction}>Preparing heart rate measurement...</Text>
+              )}
+              {animationStep === 1 && (
+                <Text style={styles.instruction}>Place your finger on the camera</Text>
+              )}
+              {animationStep === 2 && (
+                <Text style={styles.instruction}>Keep your finger still for 15 seconds</Text>
+              )}
+            </Animated.View>
+
+            <TouchableOpacity 
+              style={styles.cancelButton}
+              onPress={() => setShowHeartRateModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Modal>
     </View>
   );
 }
@@ -674,7 +816,7 @@ const { steps, heartRate} = useGoogleFit();
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    backgroundColor: "#F0F9FF" 
+    backgroundColor: COLORS.softGrey 
   },
   scrollView: { 
     flex: 1, 
@@ -684,12 +826,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: "#F0F9FF"
+    backgroundColor: COLORS.softGrey
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#4B5563'
+    color: COLORS.textLight
   },
   headerAnimated: { 
     marginBottom: 16 
@@ -702,15 +844,15 @@ const styles = StyleSheet.create({
   title: { 
     fontSize: 28, 
     fontWeight: "bold", 
-    color: "#111827" 
+    color: COLORS.textDark 
   },
   subtitle: { 
     fontSize: 14, 
-    color: "#6B7280", 
+    color: COLORS.textLight, 
     marginTop: 4 
   },
   avatar: {
-    backgroundColor: "white",
+    backgroundColor: COLORS.background,
     padding: 12,
     borderRadius: 100,
     shadowColor: "#000",
@@ -721,7 +863,7 @@ const styles = StyleSheet.create({
   },
   connectButton: {
     flexDirection: 'row',
-    backgroundColor: '#10B981',
+    backgroundColor: COLORS.secondary,
     padding: 12,
     borderRadius: 10,
     alignItems: 'center',
@@ -792,7 +934,7 @@ const styles = StyleSheet.create({
   },
   healthCard: {
     width: width > 500 ? "48%" : "100%",
-    backgroundColor: "white",
+    backgroundColor: COLORS.background,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
@@ -823,7 +965,7 @@ const styles = StyleSheet.create({
   cardTitle: { 
     fontSize: 16, 
     fontWeight: "600", 
-    color: "#374151" 
+    color: COLORS.textDark 
   },
   iconContainer: { 
     padding: 8, 
@@ -841,7 +983,7 @@ const styles = StyleSheet.create({
   },
   unitText: { 
     fontSize: 16, 
-    color: "#6B7280", 
+    color: COLORS.textLight, 
     marginLeft: 4, 
     marginBottom: 4 
   },
@@ -853,7 +995,20 @@ const styles = StyleSheet.create({
   },
   messageText: { 
     fontSize: 14, 
-    color: "#4B5563" 
+    color: COLORS.textLight 
+  },
+  cardButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 12
+  },
+  cardButtonText: {
+    color: "white",
+    fontWeight: "600",
+    marginRight: 8
   },
   summaryAnimated: { 
     marginBottom: 40 
@@ -903,8 +1058,88 @@ const styles = StyleSheet.create({
     borderRadius: 12
   },
   reportButtonText: {
-    color: "#3B82F6",
+    color: COLORS.primary,
     fontWeight: "600",
     marginRight: 8
-  }
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: COLORS.background,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    color: COLORS.textDark,
+  },
+  fingerAnimation: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 30,
+    height: 200,
+  },
+  finger: {
+    marginBottom: 20,
+  },
+  phone: {
+    width: 150,
+    height: 80,
+    backgroundColor: COLORS.textDark,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  cameraIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.primary,
+    marginRight: 10,
+  },
+  flashIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.accent,
+  },
+  instructionText: {
+    marginBottom: 20,
+  },
+  instruction: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: COLORS.textLight,
+    fontWeight: '500',
+  },
+  cancelButton: {
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: COLORS.softGrey,
+    width: '100%',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: COLORS.textLight,
+    fontWeight: '600',
+  },
 });

@@ -94,11 +94,11 @@ const TabBar = ({ state, descriptors, navigation }: any) => {
               <Ionicons
                 name={iconName()}
                 size={24}
-                color={isFocused ? '#6A11CB' : '#666'}
+                color={isFocused ? '#007BFF' : '#666'}
               />
               <Text style={[
                 styles.tabText,
-                { color: isFocused ? '#6A11CB' : '#666' }
+                { color: isFocused ? '#007BFF' : '#666' }
               ]}>
                 {label}
               </Text>
@@ -116,42 +116,58 @@ const TabsLayout = () => {
       tabBar={props => <TabBar {...props} />}
       screenOptions={{
         headerStyle: {
-          backgroundColor: '#6A11CB',
+          backgroundColor: '#007BFF', // Primary Blue
         },
-        headerTintColor: '#fff',
+        headerTintColor: '#FFFFFF', // White text for contrast
         headerTitleStyle: {
           fontWeight: 'bold',
+          color: '#FFFFFF',
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: '',
+          title: 'Home',
+          headerStyle: {
+            backgroundColor: '#007BFF',
+          },
         }}
       />
       <Tabs.Screen
         name="hospital"
         options={{
-          title: '',
+          title: 'Hospitals',
+          headerStyle: {
+            backgroundColor: '#007BFF',
+          },
         }}
       />
       <Tabs.Screen
         name="medicine"
         options={{
-          title: '',
+          title: 'Medicines',
+          headerStyle: {
+            backgroundColor: '#007BFF',
+          },
         }}
       />
       <Tabs.Screen
         name="riskprediction"
         options={{
-          title: '',
+          title: 'Risk Prediction',
+          headerStyle: {
+            backgroundColor: '#007BFF',
+          },
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
+          headerStyle: {
+            backgroundColor: '#007BFF',
+          },
         }}
       />
     </Tabs>
@@ -162,7 +178,7 @@ const styles = StyleSheet.create({
   tabContainer: {
     flexDirection: 'row',
     height: 70,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF', // White background
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     shadowColor: '#000',
@@ -177,7 +193,7 @@ const styles = StyleSheet.create({
   },
   slider: {
     height: 4,
-    backgroundColor: '#6A11CB',
+    backgroundColor: '#007BFF', // Primary Blue
     position: 'absolute',
     top: 0,
     left: 10,

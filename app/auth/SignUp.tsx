@@ -33,6 +33,7 @@ export default function SignUp({ navigation }: { navigation: any }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [age, setAge] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -43,27 +44,20 @@ export default function SignUp({ navigation }: { navigation: any }) {
       useNativeDriver: true,
     }).start(() => {
       // After image is shown, transition to sign up form
-      setTimeout(() => {
-        setShowSignUp(true);
-        Animated.parallel([
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(slideAnim, {
-            toValue: 1,
-            duration: 1000,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(formAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          })
-        ]).start();
-      }, 2000);
+      setShowSignUp(true);
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(formAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        })
+      ]).start();
     });
   }, []);
 
@@ -75,6 +69,7 @@ export default function SignUp({ navigation }: { navigation: any }) {
         id: userId,
         email: userData.email,
         name: userData.name,
+        age: userData.age,
         createdAt: new Date(),
       });
       return true;
@@ -85,7 +80,7 @@ export default function SignUp({ navigation }: { navigation: any }) {
   };
 
   const handleSignUp = async () => {
-    if (!email || !password || !confirmPassword || !fullName) {
+    if (!email || !password || !confirmPassword || !fullName || !age) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
     }
@@ -97,6 +92,12 @@ export default function SignUp({ navigation }: { navigation: any }) {
     
     if (password.length < 6) {
       Alert.alert('Error', 'Password should be at least 6 characters');
+      return;
+    }
+    
+    const ageNum = parseInt(age);
+    if (isNaN(ageNum) || ageNum < 1 || ageNum > 120) {
+      Alert.alert('Error', 'Please enter a valid age between 1 and 120');
       return;
     }
     
@@ -115,14 +116,15 @@ export default function SignUp({ navigation }: { navigation: any }) {
         const userData = {
           email: email,
           name: fullName,
+          age: ageNum,
         };
         
         await createUserDocument(userCredential.user.uid, userData);
         
         console.log("Sign up successful, user document created");
         Alert.alert('Success', 'Account created successfully!');
-        // You can navigate to dashboard or login screen here
-        // navigation.navigate('Dashboard');
+        // Navigate to login after successful signup
+        router.push("/auth/Login");
       }
     } catch (error: any) {
       console.error("Sign up failed:", error);
@@ -160,14 +162,14 @@ export default function SignUp({ navigation }: { navigation: any }) {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
       {/* Background Image */}
-      <Image 
-        source={{ uri: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1770&q=80' }} 
-        style={styles.backgroundImage}
-        blurRadius={3}
-      />
+      <Image
+  source={require('../Images/Download premium vector of Clean medical background vector by Tang about backgrounds, hospital, medicine, pattern, and pharmacy 2292444.jpeg')}
+  style={styles.backgroundImage}
+  blurRadius={3}
+/>
       
       {/* Overlay */}
       <View style={styles.overlay} />
@@ -176,14 +178,18 @@ export default function SignUp({ navigation }: { navigation: any }) {
         // Initial Image View
         <Animated.View style={[styles.imageContainer, { opacity: fadeAnim }]}>
           <Image 
-            source={{ uri: 'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1773&q=80' }} 
+            source={require('../Images/ChatGPT_Image_Aug_27__2025__12_51_12_PM-removebg-preview.png')}
             style={styles.logoImage}
           />
           <Text style={styles.welcomeText}>Join MediGrid</Text>
         </Animated.View>
       ) : (
         // Sign Up Form
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <Animated.View style={[
             styles.formContainer, 
             { 
@@ -198,7 +204,7 @@ export default function SignUp({ navigation }: { navigation: any }) {
               <TextInput
                 style={styles.input}
                 placeholder="Full Name"
-                placeholderTextColor="#aaa"
+                placeholderTextColor="#888"
                 value={fullName}
                 onChangeText={setFullName}
                 autoCapitalize="words"
@@ -209,12 +215,26 @@ export default function SignUp({ navigation }: { navigation: any }) {
             <View style={styles.inputContainer}>
               <TextInput
                 style={styles.input}
+                placeholder="Age"
+                placeholderTextColor="#888"
+                value={age}
+                onChangeText={setAge}
+                keyboardType="numeric"
+                maxLength={3}
+                editable={!isLoading}
+              />
+            </View>
+            
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
                 placeholder="Email Address"
-                placeholderTextColor="#aaa"
+                placeholderTextColor="#888"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoCorrect={false}
                 editable={!isLoading}
               />
             </View>
@@ -223,7 +243,7 @@ export default function SignUp({ navigation }: { navigation: any }) {
               <TextInput
                 style={styles.input}
                 placeholder="Password"
-                placeholderTextColor="#aaa"
+                placeholderTextColor="#888"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -235,7 +255,7 @@ export default function SignUp({ navigation }: { navigation: any }) {
               <TextInput
                 style={styles.input}
                 placeholder="Confirm Password"
-                placeholderTextColor="#aaa"
+                placeholderTextColor="#888"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry
@@ -280,21 +300,23 @@ export default function SignUp({ navigation }: { navigation: any }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#FFFFFF',
   },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
     padding: 20,
+    minHeight: height,
   },
   backgroundImage: {
     position: 'absolute',
     width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
   },
   imageContainer: {
     flex: 1,
@@ -305,35 +327,40 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 200,
     height: 200,
-    borderRadius: 100,
+    borderRadius: 50,
     marginBottom: 30,
+    resizeMode: 'cover',
   },
   welcomeText: {
-    color: '#fff',
+    color: '#007BFF',
     fontSize: 28,
     fontWeight: 'bold',
     textAlign: 'center',
     marginTop: 20,
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
   },
   formContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     padding: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    marginVertical: 20,
+    width: '100%',
+    alignSelf: 'center',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   signupTitle: {
-    color: '#fff',
+    color: '#007BFF',
     fontSize: 32,
     fontWeight: 'bold',
     marginBottom: 5,
     textAlign: 'center',
   },
   signupSubtitle: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: '#666',
     fontSize: 16,
     marginBottom: 30,
     textAlign: 'center',
@@ -342,25 +369,25 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: '#F5F5F5',
     borderRadius: 12,
     padding: 15,
-    color: '#fff',
+    color: '#333',
     fontSize: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: '#E0E0E0',
   },
   signupButton: {
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#007BFF',
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',
     marginBottom: 20,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 10 },
+    shadowColor: '#007BFF',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 15,
-    elevation: 5,
+    shadowRadius: 6,
+    elevation: 3,
   },
   disabledButton: {
     opacity: 0.7,
@@ -376,22 +403,24 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   loginText: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: '#666',
     fontSize: 14,
   },
   loginLink: {
-    color: '#4F46E5',
+    color: '#28A745',
     fontSize: 14,
     fontWeight: 'bold',
   },
   termsText: {
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: '#666',
     fontSize: 12,
     textAlign: 'center',
     marginTop: 10,
+    lineHeight: 18,
   },
   termsLink: {
-    color: '#4F46E5',
+    color: '#007BFF',
     fontSize: 12,
+    fontWeight: '500',
   },
 });
